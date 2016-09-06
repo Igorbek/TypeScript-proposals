@@ -1,7 +1,22 @@
-type B<T> = T|A<T>;
-type BOut<T> = T|AOut<T>;
-type BIn<T> = T|AIn<T>;
-type BInOut<T> = T|AInOut<T>;
+type B<T> = C<T>|A<T>;
+type BOut<T> = COut<T>|AOut<T>;
+type BIn<T> = CIn<T>|AIn<T>;
+type BInOut<T> = CInOut<T>|AInOut<T>;
+
+interface C<T> {
+    read(): T;
+    write(x: T): void;
+}
+interface COut<T> {
+    read(): T;
+}
+interface CIn<T> {
+    read(): {};
+    write(x: T): void;
+}
+interface CInOut<T> {
+    read(): {};
+}
 
 interface A<T> {
     // bivariant positions
@@ -103,10 +118,12 @@ declare var aDog: A<Dog>;
 aDog.write(null as A<Dog>);
 const aAnimalOutDog: AOut<Animal> = aDog;
 aAnimalOutDog.read();
-const aCatOutDog: AOut<Cat> = aDog;
+const aCatOutDog: AOut<Cat> = aDog; // fails, as expected
 //aCatOutDog.
 
 declare var aAnimal: A<Animal>;
 const aDogInAnimal: AIn<Dog> = aAnimal;
 
-<Animal><Dog | Cat>null;
+aAnimal.write(<C<Dog>>null);
+aDogInAnimal.write(<C<Dog>>null);
+aDogInAnimal.write(<C<Cat>>null);

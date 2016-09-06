@@ -1,16 +1,80 @@
 # Proposal
 
-## Grammar
+1. Strengthen input parameters assignability constraints from considering _bivariant_ to considering _contravariant_.
+2. Introduce type variance annotations (`in` and `out`) in generic type argument positions
+    1. `in` annotates _contravariant_ generic type arguments
+    2. `out` annotates _covariant_ generic type arguments
+    3. `in out` and `out in` annotate _bivariant_ generic type arguments
+    4. generic type arguments without these annotations are considered _invariant_  
+3. The annotated generic types annotated with `in` and `out` are internally represented by compiler constructed types (transformation rules are defined in the proposal)
 
-*TypeArgument*:  
-&emsp;~~*Type*~~  
-&emsp;*TypeArgumentVariance*<sub>opt</sub> *Type*  
-*TypeArgumentVariance*:  
-&emsp;`in`  
-&emsp;`out`  
-&emsp;`in out`  
-&emsp;`out in`
+Additionally, there're a few **optional** modifications being proposed: 
 
+1. Allow type variance annotation (`in` and `out`) in generic type parameter positions to instruct compiler check for co/contravariance violations.
+2. Introduce write-only properties (in addition to read-only), so that contravariant counterpart of read-write property could be extracted
+3. Improve type inference system to make possible automatically infer type variance from usage
+
+## Strengthen input parameters assignability constraints
+
+Consider input parameters of a fanction ~~bivariant~~ contravariant.
+Emit error if 
+
+```ts
+class Base { public a; }
+class Derived extends Base { public b; }
+
+function useDerived(derived: Derived) { derived.b; }
+
+const useBase: (base: Base) => void = useDerived; // this must not be allowed
+```
+
+## Terminology
+
+For any type `G` each type reference it uses in the declaration is broken down to:
+- _covariant_ type positions:
+    - return types of methods, call signatures, and construct signatures
+    - type of read-only properties
+    - return types of property getters
+    - return types of read-only index signatures
+- _contravariant_ type positions:
+    - parameter types of methods, call signatures, and construct signatures
+    - parameter types of property setters
+    - accepting types of (_not supported_) write-only properties
+    - index types of index signatures
+    - accepting types of (_not supported_) write-only index signatures
+- _invariant_ type positions:
+    - property types of read-write properties
+    - return types of index signatures
+
+Note, _ivariant_ is considered to be both _covariant_ and _contravariant_ at the same time. 
+
+## Constructing types 
+
+Defenitions:
+- within a generic type, _covariant type_ is one of the following types:
+  - a generic type argument annotated with `out` modifier (or with both `in` and `out`)
+  - a union type where one of its constituents is a _covariant type_
+  - an intersection type where one of its constituents is a _covariant type_
+- within a generic type, _contravariant type_ is one of the following types:
+  - a generic type argument annotated with `in` modifier (or with both `in` and `out`)
+  - a union type where one of its constituents is a _contravariant type_
+  - an intersection type where one of its constituents is a _contravariant type_ 
+
+```ts
+<in T, out R> {
+ T // contravariant
+ R // covariant
+ T | number // contravariant
+ R & string // covariant 
+}
+```
+
+- if a type member references a covariant type at contravariant type position, it is stripped out
+  - `<out T> { ` ~~`read(x: T): void;`~~ `}`
+  - read-write properties are splitted to two entities - a read-only property which is a covariant position and a write-only property wich is a contravariant position
+  - `<out T> { ` ~~`prop: T`~~ `readonly prop: T; }`
+- is a type member references a contravariant type at covariant position, the type is reset to `{}` type
+  - `<in T> { call(): ` ~~`T`~~ `{} }`
 
 ## Examples
 
@@ -59,27 +123,6 @@ acat2.write(new Cat());   // ok, accepts a Cat
 
 ## Type transforms
 
-Member | Invariant `I<T>` | Covariant `I<out T>` | Contravariant `I<in T>` | Bivariant `I<out in T>`  
--------|------------------|------------|-----------|--------------  
-Property | `p: T` | __`readonly `__ `p: T` | `readonly p: {}` | `readonly p: {}` 
-Getter | `get p: T` | `get p: T` | `get p: {}` | `get p: {}`
-Setter | `set p(v: T)` | ~~`set p(v: T)`~~ | `set p(v: T)` | ~~`set p(v: T)`~~
-Readonly Property | `readonly p: T` | `readonly p: T` | `readonly p: {}` | `readonly p: {}`
-Method returning `T` | `read(): T` | `read(): T` | `read(): {}`
-Method accepting `T` | `write(v: T): void` | ~~`write(v: T): void`~~ | `write(v: T): void`
-Method accepting and returning `T` | `readWrite(v: T): T` | ~~`readWrite(v: T): T`~~ | `readWrite(v: T): {}`
-Indexer | `[n: string]: T` | __`readonly`__ `[n: string]: T` | __`readonly`__ `[n: string]: {}` 
-Call returning `T` | `(): T` | `(): T` | `(): {}`
-Call accepting `T` | `(v: T): void` | ~~`(v: T): void`~~ | `(v: T): void`
-Call accepting and returning `T` | `(v: T): T` | ~~`(v: T): T`~~ | `(v: T): {}`
-Types constructed with `T` in covariant position | `(): T[]` | `(): out T[]` | `(): out in T`
-  | `(): X<T>` | `(): X<out T>` | `(): X<out in T>`
-  | `X<out T>` | `X<out T>` | `{}`
-  | `X<in T>` | `{}` | `X<in T>`
-  | `read(): X<T>` | `read(): X<out T>` | `read(): X<in T>`
-  | `write(x: X<T>): void` | `write(x: X<out T>): void` | `write(x: X<in T>): void`
-  | `f(callback: () => T)` | ~~`f(callback: () => T)`~~ | `f(callback: () => T)`
-  | `f(callback: Func<T>)` | ~~`f(callback: Func<out T>)`~~ | `f(callback: Func<in T>)`
 
 
 ```ts
